@@ -1,20 +1,25 @@
-// app.js
+// ES module 対応
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
 
 const app = express();
-const port = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8080;
 
-// JSONファイルの読み込み
-const responses = JSON.parse(fs.readFileSync(path.resolve('./responses.json'), 'utf8'));
+// JSONファイルのパスを取得
+const responsesPath = path.join(process.cwd(), 'responses.json');
+const responses = JSON.parse(fs.readFileSync(responsesPath, 'utf-8'));
 
-app.get('/query', (req, res) => {
-  const input = req.query.text;
-  const response = responses[input] || "Sorry, I don't understand.";
-  res.json({ input, response });
+app.get('/', (req, res) => {
+  res.send('Watsonx Demo AI App<br>Use ?text=your+message');
 });
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+app.get('/chat', (req, res) => {
+  const userText = req.query.text || '';
+  const reply = responses[userText.toLowerCase()] || "I don't know about that.";
+  res.json({ input: userText, reply });
+});
+
+app.listen(PORT, () => {
+  console.log(`Watsonx Demo AI App listening on port ${PORT}`);
 });

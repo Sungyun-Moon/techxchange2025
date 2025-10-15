@@ -1,24 +1,16 @@
-# watsonx-demo-app/Dockerfile
+# Node.js 20 の軽量版を使用
 FROM node:20-slim
 
-# create app directory
 WORKDIR /app
 
-# copy package first to leverage layer cache
-COPY package.json ./
+# 必要なファイルをすべてコピー
+COPY package.json app.js responses.json ./
 
-# install only production dependencies
+# 依存パッケージをインストール
 RUN npm install --production
 
-# copy application source
-COPY app.js ./
-
-# runtime port
+# ポートを公開
 EXPOSE 8080
 
-# runtime user (non-root)
-RUN addgroup --system app && adduser --system --ingroup app app
-USER app
-
-# start
+# アプリ起動
 CMD ["npm", "start"]
