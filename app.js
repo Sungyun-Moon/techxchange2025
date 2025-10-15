@@ -1,25 +1,52 @@
-// ES module 対応
-import express from 'express';
-import fs from 'fs';
-import path from 'path';
+import express from "express";
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const port = process.env.PORT || 8080;
 
-// JSONファイルのパスを取得
-const responsesPath = path.join(process.cwd(), 'responses.json');
-const responses = JSON.parse(fs.readFileSync(responsesPath, 'utf-8'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.get('/', (req, res) => {
-  res.send('Watsonx Demo AI App<br>Use ?text=your+message');
+// 簡易チャット「擬似AI」レスポンス
+function pseudoAI(input) {
+  const responses = [
+    "なるほど、それについてもう少し詳しく教えてください。",
+    "面白いですね！",
+    "うーん、ちょっと考えさせてください。",
+    "そういう見方もありますね。",
+    "それについては情報が不足しています。"
+  ];
+  // 入力に応じてランダムで返す
+  return responses[Math.floor(Math.random() * responses.length)];
+}
+
+app.get("/", (req, res) => {
+  res.send(`
+    <html>
+      <body>
+        <h1>Watsonx Demo Chat (Pseudo AI)</h1>
+        <form method="POST" action="/ask">
+          <input type="text" name="text" placeholder="Type your message" size="40" />
+          <button type="submit">Send</button>
+        </form>
+      </body>
+    </html>
+  `);
 });
 
-app.get('/chat', (req, res) => {
-  const userText = req.query.text || '';
-  const reply = responses[userText.toLowerCase()] || "I don't know about that.";
-  res.json({ input: userText, reply });
+app.post("/ask", (req, res) => {
+  const userText = req.body.text || "";
+  const answer = pseudoAI(userText);
+
+  res.send(`
+    <html>
+      <body>
+        <h1>Watsonx Demo Chat (Pseudo AI)</h1>
+        <p><b>You:</b> ${userText}</p>
+        <p><b>AI:</b> ${answer}</p>
+        <a href="/">Back</a>
+      </body>
+    </html>
+  `);
 });
 
-app.listen(PORT, () => {
-  console.log(`Watsonx Demo AI App listening on port ${PORT}`);
-});
+app.listen(port, () => console.log(`Server started on port ${port}`));
