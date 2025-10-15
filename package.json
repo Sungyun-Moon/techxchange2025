@@ -1,0 +1,16 @@
+{
+  "name": "watsonx-demo-app",
+  "version": "1.0.0",
+  "description": "Minimal Watsonx demo app for Code Engine",
+  "type": "module",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
