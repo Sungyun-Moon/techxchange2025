@@ -5,13 +5,13 @@ import fetch from "node-fetch";
 const app = express();
 app.use(bodyParser.json());
 
-// 環境変数から取得
-// ハンズオン用に固定値でも動作確認可能
-const WXO_URL = process.env.WXO_URL || "https://api.us-south.watson-orchestrate.cloud.ibm.com/instances/299bd867-b635-41a5-b843-b446da3b0d8f/messages";
-const WXO_API_KEY = process.env.WXO_API_KEY || "bKgjnWJAJTTiHD2NuilP6RtPoH7pEiAW79pgzB5IVKiB";
+// 環境変数から取得（TechZone 用に WXO 連携はモック可）
+const WXO_URL = process.env.WXO_URL || "";
+const WXO_API_KEY = process.env.WXO_API_KEY || "";
 
-// IAMトークン生成
+// IAMトークン生成（実際に連携する場合のみ）
 async function getIAMToken(apiKey) {
+  if (!apiKey) return null; // モック用
   const res = await fetch("https://iam.cloud.ibm.com/identity/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -27,9 +27,13 @@ app.post("/chat", async (req, res) => {
   if (!userInput) return res.status(400).json({ error: "message is required" });
 
   try {
+    // TechZone 制限下ではモックで応答
+    let reply = "ここに WXO の回答が入ります (モック)";
+    
+    // 実際に連携可能な場合は以下を有効化
+    /*
     const token = await getIAMToken(WXO_API_KEY);
-
-    const response = await fetch(WXO_URL, {
+    const response = await fetch(`${WXO_URL}/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -37,36 +41,102 @@ app.post("/chat", async (req, res) => {
       },
       body: JSON.stringify({ input: { text: userInput } })
     });
-
     const data = await response.json();
-    res.json({ message: data.output?.generic?.[0]?.text || "No response from WXO" });
+    reply = data.output?.generic?.[0]?.text || "No response from WXO";
+    */
 
+    res.json({ message: reply });
   } catch (err) {
     console.error("WXO call failed:", err);
     res.status(500).json({ error: "Failed to get response from Watsonx Orchestrate" });
   }
 });
 
-// シンプルUI
+// シンプルUI + デザイン改善
 app.get("/", (req, res) => {
   res.send(`
     <html>
+      <head>
+        <title>Chatbot</title>
+        <style>
+          body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+          }
+          #container {
+            width: 500px;
+            background: white;
+            padding: 20px;
+            box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
+            border-radius: 10px;
+          }
+          #chat {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background-color: #fafafa;
+          }
+          input {
+            width: calc(100% - 90px);
+            padding: 10px;
+            font-size: 14px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+          }
+          button {
+            padding: 10px 15px;
+            font-size: 14px;
+            border-radius: 5px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+          }
+          button:hover { background-color: #0056b3; }
+          #resetBtn {
+            background-color: #6c757d;
+            margin-top: 10px;
+          }
+          #resetBtn:hover { background-color: #5a6268; }
+        </style>
+      </head>
       <body>
-        <h2>Chat with Watsonx Orchestrate</h2>
-        <input id="msg" placeholder="Say something" />
-        <button onclick="send()">Send</button>
-        <div id="chat"></div>
+        <div id="container">
+          <h2 style="text-align:center;">Chatbot</h2>
+          <div id="chat"></div>
+          <input id="msg" placeholder="Say something" />
+          <button onclick="send()">Send</button>
+          <button id="resetBtn" onclick="resetChat()">戻る</button>
+        </div>
+
         <script>
           async function send() {
-            const msg = document.getElementById('msg').value;
+            const msgInput = document.getElementById('msg');
+            const msg = msgInput.value.trim();
+            if(!msg) return;
             const res = await fetch('/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ message: msg })
             });
             const data = await res.json();
-            document.getElementById('chat').innerHTML += '<p><b>You:</b> '+msg+'</p>';
-            document.getElementById('chat').innerHTML += '<p><b>Watsonx:</b> '+(data.message||data.error)+'</p>';
+            const chatDiv = document.getElementById('chat');
+            chatDiv.innerHTML += '<p><b>You:</b> '+msg+'</p>';
+            chatDiv.innerHTML += '<p><b>Bot:</b> '+(data.message||data.error)+'</p>';
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+            msgInput.value = '';
+          }
+
+          function resetChat() {
+            document.getElementById('chat').innerHTML = '';
+            document.getElementById('msg').value = '';
           }
         </script>
       </body>
