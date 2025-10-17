@@ -1,63 +1,16 @@
 import express from "express";
 import bodyParser from "body-parser";
-import fetch from "node-fetch";
 
 const app = express();
 app.use(bodyParser.json());
 
-// Service Access バインド環境変数
-const WXO_URL = process.env.WATSONX_ORCHESTRATE_URL;
-const WXO_API_KEY = process.env.WATSONX_ORCHESTRATE_API_KEY;
-
-// 環境変数未設定の場合は即終了
-if (!WXO_URL || !WXO_API_KEY) {
-  console.error("WXO Service Access not bound correctly.");
-  process.exit(1);
-}
-
-// IAMトークン生成
-async function getIAMToken(apiKey) {
-  const res = await fetch("https://iam.cloud.ibm.com/identity/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${apiKey}`
-  });
-  const data = await res.json();
-  return data.access_token;
-}
-
-// チャット用API
-app.post("/chat", async (req, res) => {
+// シンプルなチャット API（現時点では固定応答）
+app.post("/chat", (req, res) => {
   const userInput = req.body.message;
   if (!userInput) return res.status(400).json({ error: "message is required" });
 
-  try {
-    const token = await getIAMToken(WXO_API_KEY);
-
-    const response = await fetch(`${WXO_URL}/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
-      body: JSON.stringify({ input: { text: userInput } })
-    });
-
-    const text = await response.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      console.error("Failed to parse WXO response:", text);
-      return res.status(500).json({ error: "Invalid response from WXO" });
-    }
-
-    res.json({ message: data.output?.generic?.[0]?.text || "No response from WXO" });
-
-  } catch (err) {
-    console.error("WXO call failed:", err);
-    res.status(500).json({ error: "Failed to get response from Watsonx Orchestrate" });
-  }
+  // 現時点ではまだWxo連動なし
+  res.json({ message: "This is a placeholder response. Connect to WXO later." });
 });
 
 // シンプルUI
@@ -65,7 +18,7 @@ app.get("/", (req, res) => {
   res.send(`
     <html>
       <body>
-        <h2>Chat with Watsonx Orchestrate</h2>
+        <h2>Chatbot (WXO未連動)</h2>
         <input id="msg" placeholder="Say something" />
         <button onclick="send()">Send</button>
         <div id="chat"></div>
@@ -79,7 +32,7 @@ app.get("/", (req, res) => {
             });
             const data = await res.json();
             document.getElementById('chat').innerHTML += '<p><b>You:</b> '+msg+'</p>';
-            document.getElementById('chat').innerHTML += '<p><b>Watsonx:</b> '+(data.message||data.error)+'</p>';
+            document.getElementById('chat').innerHTML += '<p><b>Bot:</b> '+(data.message||data.error)+'</p>';
           }
         </script>
       </body>
