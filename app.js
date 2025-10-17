@@ -5,17 +5,17 @@ import fetch from "node-fetch";
 const app = express();
 app.use(bodyParser.json());
 
-// Service Access バインドから取得
-// TechZoneでは WATSONX_ORCHESTRATE_URL と WATSONX_ORCHESTRATE_API_KEY が注入される
+// Service Access バインド環境変数
 const WXO_URL = process.env.WATSONX_ORCHESTRATE_URL;
 const WXO_API_KEY = process.env.WATSONX_ORCHESTRATE_API_KEY;
 
+// 環境変数未設定の場合は即終了
 if (!WXO_URL || !WXO_API_KEY) {
-  console.error("Environment variables for WXO not set properly.");
+  console.error("WXO Service Access not bound correctly.");
   process.exit(1);
 }
 
-// IAMトークン生成（汎用対応）
+// IAMトークン生成
 async function getIAMToken(apiKey) {
   const res = await fetch("https://iam.cloud.ibm.com/identity/token", {
     method: "POST",
@@ -26,12 +26,14 @@ async function getIAMToken(apiKey) {
   return data.access_token;
 }
 
+// チャット用API
 app.post("/chat", async (req, res) => {
   const userInput = req.body.message;
   if (!userInput) return res.status(400).json({ error: "message is required" });
 
   try {
     const token = await getIAMToken(WXO_API_KEY);
+
     const response = await fetch(`${WXO_URL}/messages`, {
       method: "POST",
       headers: {
@@ -85,5 +87,6 @@ app.get("/", (req, res) => {
   `);
 });
 
+// ポート設定
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log(`Listening on port ${port}`));
