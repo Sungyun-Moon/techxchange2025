@@ -28,7 +28,7 @@ app.post("/chat", async (req, res) => {
 
   try {
     // TechZone 制限下ではモックで応答
-    let reply = "ここに WXO の回答が入ります (モック)";
+    let reply = "Oops! Looks like I don't have enough info to answer that. Can you tell me a bit more?";
     
     // 実際に連携可能な場合は以下を有効化
     /*
@@ -52,7 +52,7 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-// シンプルUI + デザイン改善
+// シンプルUI + デザイン改善 + Bot回答青色
 app.get("/", (req, res) => {
   res.send(`
     <html>
@@ -129,7 +129,8 @@ app.get("/", (req, res) => {
             const data = await res.json();
             const chatDiv = document.getElementById('chat');
             chatDiv.innerHTML += '<p><b>You:</b> '+msg+'</p>';
-            chatDiv.innerHTML += '<p><b>Bot:</b> '+(data.message||data.error)+'</p>';
+            // Botの回答を青色に
+            chatDiv.innerHTML += '<p><b>Bot:</b> <span style="color:blue;">'+(data.message||data.error)+'</span></p>';
             chatDiv.scrollTop = chatDiv.scrollHeight;
             msgInput.value = '';
           }
