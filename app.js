@@ -5,11 +5,11 @@ import fetch from "node-fetch";
 const app = express();
 app.use(bodyParser.json());
 
-// 手動で設定した環境変数を利用
-const WXO_URL = process.env.WXO_URL;        // 例: https://api.jp-tok.watsonx.ai/wxo/api/v1
+// 環境変数から取得
+const WXO_URL = process.env.WXO_URL;       // 例: https://api.jp-tok.watsonx.ai/wxo/api/v1
 const WXO_API_KEY = process.env.WXO_API_KEY;
 
-// IBM Cloud IAM トークンを生成する関数
+// IAMトークン生成（汎用対応）
 async function getIAMToken(apiKey) {
   const res = await fetch("https://iam.cloud.ibm.com/identity/token", {
     method: "POST",
@@ -22,33 +22,21 @@ async function getIAMToken(apiKey) {
 
 app.post("/chat", async (req, res) => {
   const userInput = req.body.message;
-  if (!userInput) {
-    return res.status(400).json({ error: "message is required" });
-  }
+  if (!userInput) return res.status(400).json({ error: "message is required" });
 
   try {
-    // ① IAMトークンを取得
     const token = await getIAMToken(WXO_API_KEY);
-
-    // ② Watsonx Orchestrate API 呼び出し
     const response = await fetch(`${WXO_URL}/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
+        "Authorization": `Bearer ${token}`
       },
-      body: JSON.stringify({
-        input: { text: userInput }
-      })
+      body: JSON.stringify({ input: { text: userInput } })
     });
 
     const data = await response.json();
-
-    // ③ 応答をパースして返す
-    res.json({
-      from: "wxo",
-      message: data.output?.generic?.[0]?.text || "No response from Watsonx Orchestrate"
-    });
+    res.json({ message: data.output?.generic?.[0]?.text || "No response from WXO" });
 
   } catch (err) {
     console.error("WXO call failed:", err);
@@ -60,12 +48,11 @@ app.post("/chat", async (req, res) => {
 app.get("/", (req, res) => {
   res.send(`
     <html>
-      <head><title>Watsonx Chatbot</title></head>
-      <body style="font-family:sans-serif;">
+      <body>
         <h2>Chat with Watsonx Orchestrate</h2>
-        <input id="msg" placeholder="Say something..." style="width:300px;" />
+        <input id="msg" placeholder="Say something" />
         <button onclick="send()">Send</button>
-        <div id="chat" style="margin-top:20px;"></div>
+        <div id="chat"></div>
         <script>
           async function send() {
             const msg = document.getElementById('msg').value;
@@ -75,9 +62,8 @@ app.get("/", (req, res) => {
               body: JSON.stringify({ message: msg })
             });
             const data = await res.json();
-            const chat = document.getElementById('chat');
-            chat.innerHTML += '<p><b>You:</b> ' + msg + '</p>';
-            chat.innerHTML += '<p><b>Watsonx:</b> ' + (data.message || data.error) + '</p>';
+            document.getElementById('chat').innerHTML += '<p><b>You:</b> '+msg+'</p>';
+            document.getElementById('chat').innerHTML += '<p><b>Watsonx:</b> '+(data.message||data.error)+'</p>';
           }
         </script>
       </body>
