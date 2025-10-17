@@ -1,52 +1,66 @@
 import express from "express";
+import fetch from "node-fetch";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
-const port = process.env.PORT || 8080;
-
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// 簡易チャット「擬似AI」レスポンス
-function pseudoAI(input) {
-  const responses = [
-    "なるほど、それについてもう少し詳しく教えてください。",
-    "面白いですね！",
-    "うーん、ちょっと考えさせてください。",
-    "そういう見方もありますね。",
-    "それについては情報が不足しています。"
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use(express.static(path.join(__dirname, "public")));
+
+const PORT = process.env.PORT || 8080;
+
+// WXO連携用の環境変数（Service Access経由で自動注入される想定）
+const WXO_API_URL = process.env.WXO_API_URL || "";
+const WXO_API_KEY = process.env.WXO_API_KEY || "";
+
+console.log("WXO連携状態:", WXO_API_URL && WXO_API_KEY ? "有効" : "無効");
+
+app.post("/chat", async (req, res) => {
+  const userInput = req.body.message || "";
+
+  // 🔹 WXO連携が有効な場合
+  if (WXO_API_URL && WXO_API_KEY) {
+    try {
+      const response = await fetch(`${WXO_API_URL}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${WXO_API_KEY}`,
+        },
+        body: JSON.stringify({
+          input: userInput,
+          options: { debug: false },
+        }),
+      });
+
+      const data = await response.json();
+      let answer =
+        data.output?.text?.[0] ||
+        data.message ||
+        "（WXOからの応答を取得できませんでした）";
+
+      return res.json({ reply: answer });
+    } catch (err) {
+      console.error("WXO呼び出しエラー:", err);
+      return res.json({ reply: "（WXOとの通信に失敗しました）" });
+    }
+  }
+
+  // 🔸 WXO未連携時：ランダムなAI風応答
+  const fallbackReplies = [
+    "なるほど、面白い視点ですね！",
+    "もう少し詳しく教えてもらえますか？",
+    "それはとても良い質問です。",
+    "確かに、その点は考えさせられますね。",
   ];
-  // 入力に応じてランダムで返す
-  return responses[Math.floor(Math.random() * responses.length)];
-}
-
-app.get("/", (req, res) => {
-  res.send(`
-    <html>
-      <body>
-        <h1>Watsonx Demo Chat (Pseudo AI)</h1>
-        <form method="POST" action="/ask">
-          <input type="text" name="text" placeholder="Type your message" size="40" />
-          <button type="submit">Send</button>
-        </form>
-      </body>
-    </html>
-  `);
+  const randomReply =
+    fallbackReplies[Math.floor(Math.random() * fallbackReplies.length)];
+  res.json({ reply: randomReply });
 });
 
-app.post("/ask", (req, res) => {
-  const userText = req.body.text || "";
-  const answer = pseudoAI(userText);
-
-  res.send(`
-    <html>
-      <body>
-        <h1>Watsonx Demo Chat (Pseudo AI)</h1>
-        <p><b>You:</b> ${userText}</p>
-        <p><b>AI:</b> ${answer}</p>
-        <a href="/">Back</a>
-      </body>
-    </html>
-  `);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
-
-app.listen(port, () => console.log(`Server started on port ${port}`));
