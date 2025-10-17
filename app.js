@@ -5,73 +5,82 @@ import fetch from "node-fetch";
 const app = express();
 app.use(bodyParser.json());
 
-// 環境変数からwxoのService Access情報を取得
-const WXO_URL = process.env.WXO_URL;
+// 手動で設定した環境変数を利用
+const WXO_URL = process.env.WXO_URL;        // 例: https://api.jp-tok.watsonx.ai/wxo/api/v1
 const WXO_API_KEY = process.env.WXO_API_KEY;
+
+// IBM Cloud IAM トークンを生成する関数
+async function getIAMToken(apiKey) {
+  const res = await fetch("https://iam.cloud.ibm.com/identity/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${apiKey}`
+  });
+  const data = await res.json();
+  return data.access_token;
+}
 
 app.post("/chat", async (req, res) => {
   const userInput = req.body.message;
-
   if (!userInput) {
     return res.status(400).json({ error: "message is required" });
   }
 
   try {
-    // wxo APIへリクエスト送信
-    const response = await fetch(`${WXO_URL}/v1/chat`, {
+    // ① IAMトークンを取得
+    const token = await getIAMToken(WXO_API_KEY);
+
+    // ② Watsonx Orchestrate API 呼び出し
+    const response = await fetch(`${WXO_URL}/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${WXO_API_KEY}`,
+        "Authorization": `Bearer ${token}`,
       },
       body: JSON.stringify({
-        input: userInput
+        input: { text: userInput }
       })
     });
 
     const data = await response.json();
 
-    if (response.ok) {
-      res.json({
-        from: "wxo",
-        message: data.output || "No response from Watsonx Orchestrate"
-      });
-    } else {
-      res.status(500).json({
-        error: data.error || "Error from Watsonx Orchestrate"
-      });
-    }
+    // ③ 応答をパースして返す
+    res.json({
+      from: "wxo",
+      message: data.output?.generic?.[0]?.text || "No response from Watsonx Orchestrate"
+    });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    console.error("WXO call failed:", err);
+    res.status(500).json({ error: "Failed to get response from Watsonx Orchestrate" });
   }
 });
 
-// シンプルなHTMLフロントエンド（確認用UI）
+// シンプルUI
 app.get("/", (req, res) => {
   res.send(`
     <html>
-    <head><title>Watsonx Chatbot</title></head>
-    <body style="font-family: sans-serif;">
-      <h2>Chat with Watsonx Orchestrate</h2>
-      <input id="msg" placeholder="Say something..." style="width: 300px;" />
-      <button onclick="send()">Send</button>
-      <div id="chat" style="margin-top: 20px;"></div>
-      <script>
-        async function send() {
-          const msg = document.getElementById('msg').value;
-          const res = await fetch('/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: msg })
-          });
-          const data = await res.json();
-          const chat = document.getElementById('chat');
-          chat.innerHTML += '<p><b>You:</b> ' + msg + '</p>';
-          chat.innerHTML += '<p><b>Watsonx:</b> ' + (data.message || data.error) + '</p>';
-        }
-      </script>
-    </body>
+      <head><title>Watsonx Chatbot</title></head>
+      <body style="font-family:sans-serif;">
+        <h2>Chat with Watsonx Orchestrate</h2>
+        <input id="msg" placeholder="Say something..." style="width:300px;" />
+        <button onclick="send()">Send</button>
+        <div id="chat" style="margin-top:20px;"></div>
+        <script>
+          async function send() {
+            const msg = document.getElementById('msg').value;
+            const res = await fetch('/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: msg })
+            });
+            const data = await res.json();
+            const chat = document.getElementById('chat');
+            chat.innerHTML += '<p><b>You:</b> ' + msg + '</p>';
+            chat.innerHTML += '<p><b>Watsonx:</b> ' + (data.message || data.error) + '</p>';
+          }
+        </script>
+      </body>
     </html>
   `);
 });
