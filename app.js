@@ -5,9 +5,15 @@ import fetch from "node-fetch";
 const app = express();
 app.use(bodyParser.json());
 
-// 環境変数から取得
-const WXO_URL = process.env.WXO_URL;       // 例: https://api.jp-tok.watsonx.ai/wxo/api/v1
-const WXO_API_KEY = process.env.WXO_API_KEY;
+// Service Access バインドから取得
+// TechZoneでは WATSONX_ORCHESTRATE_URL と WATSONX_ORCHESTRATE_API_KEY が注入される
+const WXO_URL = process.env.WATSONX_ORCHESTRATE_URL;
+const WXO_API_KEY = process.env.WATSONX_ORCHESTRATE_API_KEY;
+
+if (!WXO_URL || !WXO_API_KEY) {
+  console.error("Environment variables for WXO not set properly.");
+  process.exit(1);
+}
 
 // IAMトークン生成（汎用対応）
 async function getIAMToken(apiKey) {
@@ -35,7 +41,15 @@ app.post("/chat", async (req, res) => {
       body: JSON.stringify({ input: { text: userInput } })
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error("Failed to parse WXO response:", text);
+      return res.status(500).json({ error: "Invalid response from WXO" });
+    }
+
     res.json({ message: data.output?.generic?.[0]?.text || "No response from WXO" });
 
   } catch (err) {
