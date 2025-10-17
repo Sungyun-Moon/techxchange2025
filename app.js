@@ -6,8 +6,9 @@ const app = express();
 app.use(bodyParser.json());
 
 // 環境変数から取得
-const WXO_URL = process.env.WXO_URL;
-const WXO_API_KEY = process.env.WXO_API_KEY;
+// ハンズオン用に固定値でも動作確認可能
+const WXO_URL = process.env.WXO_URL || "https://api.us-south.watson-orchestrate.cloud.ibm.com/instances/299bd867-b635-41a5-b843-b446da3b0d8f/messages";
+const WXO_API_KEY = process.env.WXO_API_KEY || "bKgjnWJAJTTiHD2NuilP6RtPoH7pEiAW79pgzB5IVKiB";
 
 // IAMトークン生成
 async function getIAMToken(apiKey) {
@@ -20,7 +21,7 @@ async function getIAMToken(apiKey) {
   return data.access_token;
 }
 
-// チャットAPI
+// /chat エンドポイント
 app.post("/chat", async (req, res) => {
   const userInput = req.body.message;
   if (!userInput) return res.status(400).json({ error: "message is required" });
@@ -28,7 +29,7 @@ app.post("/chat", async (req, res) => {
   try {
     const token = await getIAMToken(WXO_API_KEY);
 
-    const response = await fetch(`${WXO_URL}`, {
+    const response = await fetch(WXO_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
