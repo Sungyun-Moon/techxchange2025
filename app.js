@@ -31,7 +31,7 @@ app.post("/chat", async (req, res) => {
     let reply = "Oops! Looks like I don't have enough info to answer that. Can you tell me a bit more?";
     
     // 実際に連携可能な場合は以下を有効化
-    /*
+    
     const token = await getIAMToken(WXO_API_KEY);
     const response = await fetch(`${WXO_URL}/messages`, {
       method: "POST",
@@ -43,7 +43,6 @@ app.post("/chat", async (req, res) => {
     });
     const data = await response.json();
     reply = data.output?.generic?.[0]?.text || "No response from WXO";
-    */
 
     res.json({ message: reply });
   } catch (err) {
