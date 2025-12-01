@@ -2,16 +2,20 @@ import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
 
+console.log(process.env)
+
 const app = express();
 app.use(bodyParser.json());
 
-// 環境変数から取得（TechZone 用に WXO 連携はモック可）
-const WXO_URL = process.env.WXO_URL || "";
-const WXO_API_KEY = process.env.WXO_APIKEY || "";
+// 環境変数から取得
+const WXO_URL = process.env.WATSONX_ORCHESTRATE_URL || "";
+const WXO_APIKEY = process.env.WATSONX_ORCHESTRATE_APIKEY || "";
 
-// IAMトークン生成（実際に連携する場合のみ）
+let AGENT_ID = null;
+
+// IAMトークン生成
 async function getIAMToken(apiKey) {
-  if (!apiKey) return null; // モック用
+  if (!apiKey) return null;
   const res = await fetch("https://iam.cloud.ibm.com/identity/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -21,33 +25,96 @@ async function getIAMToken(apiKey) {
   return data.access_token;
 }
 
+// Agent一覧から AskHR のエージェントIDを取得
+async function loadAgentId(token) {
+  try {
+    const res = await fetch(`${WXO_URL}/v1/orchestrate/agents`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`
+      }
+    });
+
+    const text = await res.text();
+    console.log("=== RAW Agent API ===");
+    console.log(text);
+
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      console.error("JSON Parse Error:", e);
+      return;
+    }
+
+    // 配列処理
+    if (!Array.isArray(json)) {
+      console.error("Agent API response is not an array!", json);
+      return;
+    }
+
+    // name or display_name が "AskHR" のものを探す
+    const askHrAgent = json.find(a =>
+      a.name === "AskHR" || a.display_name === "AskHR"
+    );
+
+    if (!askHrAgent) {
+      console.error("AskHR agent not found.");
+      return;
+    }
+
+    AGENT_ID = askHrAgent.id;
+    console.log("✔ Loaded AskHR AGENT_ID:", AGENT_ID);
+
+  } catch (err) {
+    console.error("Failed to load agent list:", err);
+  }
+}
+
 // /chat エンドポイント
 app.post("/chat", async (req, res) => {
   const userInput = req.body.message;
   if (!userInput) return res.status(400).json({ error: "message is required" });
 
+if (!AGENT_ID) {
+    return res.status(500).json({ error: "AGENT_ID not loaded yet" });
+  }
+
   try {
-    // TechZone 制限下ではモックで応答
-    let reply = "Oops! Looks like I don't have enough info to answer that. Can you tell me a bit more?";
-    
-    // 実際に連携可能な場合は以下を有効化
-    
-    const token = await getIAMToken(WXO_API_KEY);
-    const response = await fetch(`${WXO_URL}/messages`, {
+    // --- IAMトークン生成 ---
+    const token = await getIAMToken(WXO_APIKEY);
+
+    if (!token) {
+      return res.status(500).json({ error: "IAM Token could not be generated" });
+    }
+
+    // --- watsonx Orchestrate API呼び出し ---
+    const response = await fetch(`${WXO_URL}/v1/orchestrate/${AGENT_ID}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`
       },
-      body: JSON.stringify({ input: { text: userInput } })
+   body: JSON.stringify({
+      stream: false,
+      messages: [
+      {
+        role: "user",
+        content: userInput
+     }
+  ]
+})
     });
-    const data = await response.json();
-    reply = data.output?.generic?.[0]?.text || "No response from WXO";
 
-    res.json({ message: reply });
+    const data = await response.json();
+    const reply = data.choices?.[0]?.message?.content || "No response from WXO";
+
+    // --- 応答返却 ---
+    return res.json({ message: reply });
+
   } catch (err) {
     console.error("WXO call failed:", err);
-    res.status(500).json({ error: "Failed to get response from Watsonx Orchestrate" });
+    return res.status(500).json({ error: "Failed to get response from Watsonx Orchestrate" });
   }
 });
 
@@ -112,7 +179,9 @@ app.get("/", (req, res) => {
           <div id="chat"></div>
           <input id="msg" placeholder="Say something" />
           <button onclick="send()">Send</button>
-          <button id="resetBtn" onclick="resetChat()">戻る</button>
+          <button id="resetBtn" onclick="resetChat()">Clear</button>
+          <button id="envBtn" onclick="showEnv()">Env</button>
+         <button id="agentBtn" onclick="showAgent()">Agent</button>
         </div>
 
         <script>
@@ -134,6 +203,24 @@ app.get("/", (req, res) => {
             msgInput.value = '';
           }
 
+          async function showEnv() {
+            const res = await fetch('/env');
+            const data = await res.json();
+            
+            const chatDiv = document.getElementById('chat');
+            chatDiv.innerHTML += "<p><b>Env:</b></p><pre>" + JSON.stringify(data, null, 2) + "</pre>";
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+          }
+
+          async function showAgent() {
+           const res = await fetch('/agent');
+           const data = await res.json();
+           
+           const chatDiv = document.getElementById('chat');
+           chatDiv.innerHTML += "<p><b>AGENT_ID:</b></p><pre>" + JSON.stringify(data, null, 2) + "</pre>";
+           chatDiv.scrollTop = chatDiv.scrollHeight;
+         }
+
           function resetChat() {
             document.getElementById('chat').innerHTML = '';
             document.getElementById('msg').value = '';
@@ -145,4 +232,28 @@ app.get("/", (req, res) => {
 });
 
 const port = process.env.PORT || 8080;
+
+// --- 起動時にAGENT IDを自動取得 ---
+(async () => {
+  const token = await getIAMToken(WXO_APIKEY);
+  if (token) {
+    await loadAgentId(token);
+  } else {
+    console.error("Failed to get IAM token, cannot load agent ID");
+  }
+})();
+
 app.listen(port, () => console.log(`Listening on port ${port}`));
+
+// 環境変数を返す
+app.get("/env", (req, res) => {
+  res.json(process.env);
+});
+
+// AGENT_ID を返す
+app.get("/agent", (req, res) => {
+  res.json({ AGENT_ID });
+});
+
+
+
