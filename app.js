@@ -2,6 +2,8 @@ import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
 
+let lastAgentId = null;
+
 console.log(process.env)
 
 const app = express();
@@ -10,8 +12,6 @@ app.use(bodyParser.json());
 // 環境変数から取得
 const WXO_URL = process.env.WATSONX_ORCHESTRATE_URL || "";
 const WXO_APIKEY = process.env.WATSONX_ORCHESTRATE_APIKEY || "";
-
-let AGENT_ID = null;
 
 // IAMトークン生成
 async function getIAMToken(apiKey) {
@@ -25,8 +25,8 @@ async function getIAMToken(apiKey) {
   return data.access_token;
 }
 
-// Agent一覧から AskHR のエージェントIDを取得
-async function loadAgentId(token) {
+// ユーザーがプルダウンで指定したエージェントIDを取得
+async function loadAgentId(token, agentName) {
   try {
     const res = await fetch(`${WXO_URL}/v1/orchestrate/agents`, {
       method: "GET",
@@ -53,18 +53,18 @@ async function loadAgentId(token) {
       return;
     }
 
-    // name or display_name が "AskHR" のものを探す
-    const askHrAgent = json.find(a =>
-      a.name === "AskHR" || a.display_name === "AskHR"
-    );
+    // agent idを検索
+   const agent = json.find(a => a.name === agentName || a.display_name === agentName);    
 
-    if (!askHrAgent) {
-      console.error("AskHR agent not found.");
-      return;
+   if (!agent) {
+      console.error(`Agent not found: ${agentName}`);
+      return null;
     }
 
-    AGENT_ID = askHrAgent.id;
-    console.log("✔ Loaded AskHR AGENT_ID:", AGENT_ID);
+   lastAgentId = agent.id;
+   console.log("✔ Loaded agent.id:", agent.id);
+   return agent.id;   
+   
 
   } catch (err) {
     console.error("Failed to load agent list:", err);
@@ -74,11 +74,10 @@ async function loadAgentId(token) {
 // /chat エンドポイント
 app.post("/chat", async (req, res) => {
   const userInput = req.body.message;
+  const agentName = req.body.agent;
+ 
   if (!userInput) return res.status(400).json({ error: "message is required" });
-
-if (!AGENT_ID) {
-    return res.status(500).json({ error: "AGENT_ID not loaded yet" });
-  }
+  if (!agentName) return res.status(400).json({ error: "agent is required" });
 
   try {
     // --- IAMトークン生成 ---
@@ -88,8 +87,13 @@ if (!AGENT_ID) {
       return res.status(500).json({ error: "IAM Token could not be generated" });
     }
 
+    // Agent ID を取得
+    const agentId = await loadAgentId(token, agentName);
+    if (!agentId) return res.status(500).json({ error: `Agent ID not found for ${agentName}` });
+
+
     // --- watsonx Orchestrate API呼び出し ---
-    const response = await fetch(`${WXO_URL}/v1/orchestrate/${AGENT_ID}/chat/completions`, {
+    const response = await fetch(`${WXO_URL}/v1/orchestrate/${agentId}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -149,6 +153,26 @@ app.get("/", (req, res) => {
             border-radius: 5px;
             background-color: #fafafa;
           }
+          select {
+            padding: 10px;
+            font-size: 14px;
+            border-radius: 5px;
+            border: 1px solid #007bff;
+            background-color: #e8f0fe;
+            color: #003e7e;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+          }
+          select:hover {
+            background-color: #dbe7ff;
+          }
+
+          select:focus {
+            outline: none;
+            border-color: #0056b3;
+            box-shadow: 0 0 3px rgba(0, 123, 255, 0.7);
+          }
           input {
             width: calc(100% - 90px);
             padding: 10px;
@@ -177,6 +201,28 @@ app.get("/", (req, res) => {
         <div id="container">
           <h2 style="text-align:center;">Chatbot</h2>
           <div id="chat"></div>
+          <select id="agentSelect">
+            <option value="AskHR1">AskHR1</option>
+            <option value="AskHR2">AskHR2</option>
+            <option value="AskHR3">AskHR3</option>
+            <option value="AskHR4">AskHR4</option>
+            <option value="AskHR5">AskHR5</option>
+            <option value="AskHR6">AskHR6</option>
+            <option value="AskHR7">AskHR7</option>
+            <option value="AskHR8">AskHR8</option>
+            <option value="AskHR9">AskHR9</option>
+            <option value="AskHR10">AskHR10</option>
+            <option value="AskHR11">AskHR11</option>
+            <option value="AskHR12">AskHR12</option>
+            <option value="AskHR13">AskHR13</option>
+            <option value="AskHR14">AskHR14</option>
+            <option value="AskHR15">AskHR15</option>
+            <option value="AskHR16">AskHR16</option>
+            <option value="AskHR17">AskHR17</option>
+            <option value="AskHR18">AskHR18</option>
+            <option value="AskHR19">AskHR19</option>
+            <option value="AskHR20">AskHR20</option>
+          </select>
           <input id="msg" placeholder="Say something" />
           <button onclick="send()">Send</button>
           <button id="resetBtn" onclick="resetChat()">Clear</button>
@@ -187,12 +233,13 @@ app.get("/", (req, res) => {
         <script>
           async function send() {
             const msgInput = document.getElementById('msg');
+            const agentName = document.getElementById('agentSelect').value;
             const msg = msgInput.value.trim();
             if(!msg) return;
             const res = await fetch('/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ message: msg })
+              body: JSON.stringify({ message: msg, agent: agentName })
             });
             const data = await res.json();
             const chatDiv = document.getElementById('chat');
@@ -217,7 +264,7 @@ app.get("/", (req, res) => {
            const data = await res.json();
            
            const chatDiv = document.getElementById('chat');
-           chatDiv.innerHTML += "<p><b>AGENT_ID:</b></p><pre>" + JSON.stringify(data, null, 2) + "</pre>";
+           chatDiv.innerHTML += "<p><b>Agent ID:</b></p><pre>" + JSON.stringify(data, null, 2) + "</pre>";
            chatDiv.scrollTop = chatDiv.scrollHeight;
          }
 
@@ -233,16 +280,6 @@ app.get("/", (req, res) => {
 
 const port = process.env.PORT || 8080;
 
-// --- 起動時にAGENT IDを自動取得 ---
-(async () => {
-  const token = await getIAMToken(WXO_APIKEY);
-  if (token) {
-    await loadAgentId(token);
-  } else {
-    console.error("Failed to get IAM token, cannot load agent ID");
-  }
-})();
-
 app.listen(port, () => console.log(`Listening on port ${port}`));
 
 // 環境変数を返す
@@ -250,9 +287,9 @@ app.get("/env", (req, res) => {
   res.json(process.env);
 });
 
-// AGENT_ID を返す
+// Agent ID を返す
 app.get("/agent", (req, res) => {
-  res.json({ AGENT_ID });
+  res.json({ agentId: lastAgentId });
 });
 
 
